@@ -11,6 +11,7 @@ edition="2018"
 
 [dependencies]
 libc = "^0.2"
+errno = "*"
 
 [dev_dependencies]
 pnet = "0.25.0"

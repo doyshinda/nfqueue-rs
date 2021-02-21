@@ -45,7 +45,7 @@
 //! ```
 
 use libc;
-
+use errno;
 pub use crate::hwaddr::*;
 mod hwaddr;
 
@@ -101,7 +101,7 @@ extern "C" {
     fn nfq_handle_packet(qh: NfqueueHandle, buf: *mut libc::c_void, rc: libc::c_int)
         -> libc::c_int;
     fn nfq_set_mode(gh: NfqueueQueueHandle, mode: u8, range: u32) -> libc::c_int;
-    fn nfq_set_queuelen(gh: NfqueueQueueHandle, queuelen: u32) -> libc::c_int;
+    fn nfq_set_queue_maxlen(gh: NfqueueQueueHandle, queuelen: u32) -> libc::c_int;
 }
 
 /// Copy modes
@@ -257,10 +257,10 @@ impl<T: Send> Queue<T> {
     /// Sets the size of the queue in kernel. This fixes the maximum number of
     /// packets the kernel will store before internally before dropping upcoming
     /// packets
-    pub fn set_queuelen(&self, queuelen: u32) {
+    pub fn set_queue_maxlen(&self, queuelen: u32) {
         assert!(!self.qqh.is_null());
         unsafe {
-            nfq_set_queuelen(self.qqh, queuelen);
+            nfq_set_queue_maxlen(self.qqh, queuelen);
         }
     }
 
@@ -277,12 +277,17 @@ impl<T: Send> Queue<T> {
         loop {
             let rc = unsafe { libc::recv(fd, buf_ptr, buf_len, 0) };
             if rc < 0 {
-                panic!("error in recv()");
+                let e = errno::errno();
+                if e.0 == 105 {
+                    continue;
+                } else {
+                    panic!(format!("error in recv(): {:?}", e));
+                }
             };
 
             let rv = unsafe { nfq_handle_packet(self.qh, buf_ptr, rc as libc::c_int) };
             if rv < 0 {
-                println!("error in nfq_handle_packet()");
+                println!("error in nfq_handle_packet(): {:?}", errno::errno());
             }; // not critical
         }
     }
